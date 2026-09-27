@@ -805,6 +805,25 @@ const util = (function() {
         return "";
     }
 
+    // Like safeForFileName(), but intended for the EPUB's own save-as file name.
+    // Keeps spaces (and non-English characters), only replaces characters
+    // that are illegal in file names with "_".
+    function safeForFullFileName(title, maxLength = 512) {
+        if (title) {
+            // same set as Download.illegalWindowsFileNameChars, plus control characters
+            // eslint-disable-next-line no-control-regex
+            title = title.replace(/[~/?<>\\:*|"\u0000-\u001f\u007f]/g, "_")
+                .replace(/\u00a0/g, " ")
+                .trim();
+            const ellipsis = "...";
+            let splitLength = Math.floor((maxLength - ellipsis.length) / 2);
+            return title.length > maxLength
+                ? title.slice(0, splitLength) + ellipsis + title.slice(title.length - splitLength)
+                : title;
+        }
+        return "";
+    }
+
     function makeStorageFileName(subdirectory, index, title, extension) {
         if (title) {
             const safeLengthForNameInZip = 200;
@@ -1250,6 +1269,7 @@ const util = (function() {
         getElements: getElements,
         moveIfParent: moveIfParent,
         safeForFileName: safeForFileName,
+        safeForFullFileName: safeForFullFileName,
         styleSheetFileName: styleSheetFileName,
         isStringWhiteSpace: isStringWhiteSpace,
         isElementWhiteSpace: isElementWhiteSpace,
