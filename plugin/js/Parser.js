@@ -222,6 +222,54 @@ class Parser {
     }
 
     /**
+     * Extra CSS appended to the EPUB's stylesheet when this parser is used.
+     * Base version has none, derived classes override.
+     */
+    getExtraStyleSheet() {
+        return "";
+    }
+
+    /**
+     * Calls replacer(url) for each absolute http(s) url(...) in css and substitutes its
+     * result (skipped when it returns null). Ignores comments, @import and @font-face.
+     */
+    replaceStyleSheetImageUrls(css, replacer) {
+        const pattern = /(\/\*[\s\S]*?\*\/|@import[^;]*;|@font-face\s*\{[^}]*\})|url\(\s*(?:"([^"]*)"|'([^']*)'|([^)"'\s]*))\s*\)/gi;
+        return css.replace(pattern, (match, skipped, doubleQuoted, singleQuoted, bare) => {
+            if (skipped !== undefined) {
+                return match;
+            }
+            let url = (doubleQuoted ?? singleQuoted ?? bare ?? "").trim();
+            if (!util.isUrl(url)) {
+                return match;
+            }
+            let replacement = replacer(url);
+            return (replacement == null) ? match : `url("${replacement}")`;
+        });
+    }
+
+    /** queue images referenced by the stylesheet, so they are fetched after the cover image */
+    registerStyleSheetImages(css) {
+        if (this.userPreferences.skipImages.value) {
+            return;
+        }
+        this.replaceStyleSheetImageUrls(css, url => {
+            this.imageCollector.addImageInfo(url, url, null, false);
+            return null;
+        });
+    }
+
+    /** point url(...) at the image's location in the EPUB. Call after images are fetched. */
+    rewriteStyleSheetImageUrls(css) {
+        return this.replaceStyleSheetImageUrls(css, url => {
+            let info = this.imageCollector.imageInfoByUrl(url);
+            return ((info == null) || (info.arraybuffer == null))
+                ? null
+                : util.makeRelative(info.getZipHref());
+        });
+    }
+
+    /**
      * Default implementation, take first image in content section
     */
     findCoverImageUrl(dom) {
@@ -602,6 +650,7 @@ class Parser {
 
         this.imageCollector.reset();
         this.imageCollector.setCoverImageUrl(CoverImageUI.getCoverImageUrl());
+        this.registerStyleSheetImages(main.getCombinedStyleSheet());
 
         await this.addParsersToPages(pagesToFetch);
         let index = 0;

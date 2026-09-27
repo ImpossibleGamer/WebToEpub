@@ -199,6 +199,10 @@
 		"message": "Reset stylesheet to default",
 		"description": "Label on button to remove all changes to stylesheet and set to default value"
 	},
+	"__MSG_button_Reset_parser_stylesheet__": {
+		"message": "Reset parser stylesheet to default",
+		"description": "Label on button to discard user changes to the parser stylesheet and restore the parser's default"
+	},
 	"__MSG_button_Reverse_Chapter_Urls_Order__": {
 		"message": "Reverse Chapter URLs Order",
 		"description": "Label on button to change order of chapters from last to first"
@@ -494,6 +498,10 @@
 	"__MSG_label_Stylesheet__": {
 		"message": "Stylesheet:",
 		"description": "Label in front of edit field for setting the stylesheet (in Advanced settings)."
+	},
+	"__MSG_label_Parser_Stylesheet__": {
+		"message": "Parser Stylesheet (added after Stylesheet):",
+		"description": "Label in front of edit field for extra stylesheet that is specific to the site/parser (in Advanced settings)."
 	},
 	"__MSG_label_Theme__": {
 		"message": "Theme",

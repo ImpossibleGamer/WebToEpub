@@ -22,7 +22,8 @@ var main = (function() {
     let initialMetaInfo = null;
     let parser = null;
     let userPreferences = null;
-    let library = new Library; 
+    let extraStyleSheetHost = null;
+    let library = new Library;
 
     // register listener that is invoked when script injected into HTML sends its results
     function addMessageListener() {
@@ -52,6 +53,7 @@ var main = (function() {
                 populateMetaInfo(metaInfo);
                 setUiToDefaultState();
                 parser.populateUI(dom);
+                populateExtraStyleSheet(url);
             } catch (error) {
                 ErrorLog.showErrorMessage(error);
             }
@@ -217,6 +219,7 @@ var main = (function() {
 
     function packEpub(metaInfo) {
         let epubVersion = epubVersionFromPreferences();
+        metaInfo.styleSheet = parser.rewriteStyleSheetImageUrls(getCombinedStyleSheet());
         let epub = new EpubPacker(metaInfo, epubVersion);
         return epub.assemble(parser.epubItemSupplier());
     }
@@ -352,6 +355,46 @@ var main = (function() {
         userPreferences.readFromUi();
     }
 
+    function getExtraStyleSheetInput() {
+        return document.getElementById("parserStylesheetInput");
+    }
+
+    /** show saved override for site if there is one, otherwise the parser's default */
+    function populateExtraStyleSheet(url) {
+        try {
+            extraStyleSheetHost = ParserFactory.hostNameForParserSelection(url);
+        } catch {
+            extraStyleSheetHost = null;
+        }
+        let saved = (extraStyleSheetHost === null)
+            ? null
+            : ParserStyleSheetSettings.get(extraStyleSheetHost);
+        getExtraStyleSheetInput().value = saved ?? parser?.getExtraStyleSheet() ?? "";
+    }
+
+    function onExtraStyleSheetChanged() {
+        if ((extraStyleSheetHost === null) || (parser == null)) {
+            return;
+        }
+        ParserStyleSheetSettings.save(
+            extraStyleSheetHost,
+            getExtraStyleSheetInput().value,
+            parser.getExtraStyleSheet()
+        );
+    }
+
+    function onExtraStyleSheetToDefaultClick() {
+        getExtraStyleSheetInput().value = parser?.getExtraStyleSheet() ?? "";
+        onExtraStyleSheetChanged();
+    }
+
+    /** stylesheet from Advanced Options, followed by the parser's extra stylesheet */
+    function getCombinedStyleSheet() {
+        let extra = getExtraStyleSheetInput().value;
+        let styleSheet = userPreferences.styleSheet.value;
+        return util.isNullOrEmpty(extra) ? styleSheet : styleSheet + "\n" + extra;
+    }
+
     async function openTabWindow() {
         // open new tab window, passing ID of open tab with content to convert to epub as query parameter.
         let tabId = await getActiveTab();
@@ -415,6 +458,8 @@ var main = (function() {
     function resetUI() {
         initialWebPage = null;
         parser = null;
+        extraStyleSheetHost = null;
+        getExtraStyleSheetInput().value = "";
         let metaInfo = new EpubMetaInfo();
         metaInfo.uuid = "";
         populateMetaInfo(metaInfo);
@@ -547,6 +592,8 @@ var main = (function() {
         document.getElementById("seriesIndexInput").addEventListener("beforeinput", (event) => seriesIndexInpuValidator(event));
         document.getElementById("manualDelayPerChapterTag").addEventListener("beforeinput", (event) => manualDelayPerChapterValidator(event));
         document.getElementById("stylesheetToDefaultButton").onclick = onStylesheetToDefaultClick;
+        document.getElementById("parserStylesheetToDefaultButton").onclick = onExtraStyleSheetToDefaultClick;
+        getExtraStyleSheetInput().addEventListener("change", onExtraStyleSheetChanged);
         document.getElementById("resetButton").onclick = resetUI;
         document.getElementById("clearCoverImageUrlButton").onclick = clearCoverUrl;
         document.getElementById("seriesPageHelpButton").onclick = onSeriesPageHelp;
@@ -679,5 +726,6 @@ var main = (function() {
         resetUI: resetUI,
         getCurrentParser: () => parser,
         getUserPreferences: () => userPreferences,
+        getCombinedStyleSheet: getCombinedStyleSheet,
     };
 })();
