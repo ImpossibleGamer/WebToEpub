@@ -895,7 +895,22 @@ class Library { // eslint-disable-line no-unused-vars
             let EpubZip = new zip.ZipReader(EpubReader, {useWebWorkers: false});
             let EpubContent =  await EpubZip.getEntries();
             let opfFile = await EpubContent.filter(a => a.filename == "OEBPS/content.opf")[0].getData(new zip.TextWriter());
-            return (opfFile.match(/<dc:identifier id="BookId" opf:scheme="URI">.+?<\/dc:identifier>/)[0].replace(/<dc:identifier id="BookId" opf:scheme="URI">/,"").replace(/<\/dc:identifier>/,""));
+
+            // Parse the OPF instead of using a regex, so it works for both EPUB2
+            // (opf:scheme="URI") and EPUB3 (no scheme attribute, "uri:" prefix).
+            let opf = new DOMParser().parseFromString(opfFile, "application/xml");
+            let identifier = [...opf.getElementsByTagName("dc:identifier")]
+                .find(e => e.getAttribute("id") === "BookId");
+            if (identifier == null) {
+                throw new Error("BookId identifier not found");
+            }
+
+            // EPUB3 packer writes "uri:" + url, EPUB2 writes the plain url
+            let url = identifier.textContent.trim().replace(/^uri:/i, "");
+            if (util.isNullOrEmpty(url)) {
+                throw new Error("BookId identifier is empty");
+            }
+            return url;
         } catch {
             return "Paste URL here!";
         }
