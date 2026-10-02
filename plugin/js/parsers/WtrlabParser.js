@@ -935,10 +935,11 @@ class WtrlabParser extends Parser {
     }
 
     async fetchChapter(url) {
-        // Per-request throttle: 10000–10999 ms
+        // Per-request throttle: 1000–1999 ms
         const delay = 1000 + Math.floor(Math.random() * 1000);
         console.log(`[WtrlabParser] Delaying ${delay} ms before fetching: ${url}`);
         await util.sleep(delay);
+        
         let leaves = url.split("/");
         let novelIndex = leaves.indexOf("novel");
         let language = leaves[novelIndex - 1];
@@ -947,15 +948,16 @@ class WtrlabParser extends Parser {
         let chapter = chapterPart.startsWith("chapter-")
             ? chapterPart.slice(8)
             : chapterPart;
+            
         let fetchUrl = "https://wtr-lab.com/api/reader/get";
         let formData = 
             {
-                "translate":"ai",
-                "language":language,
-                "raw_id":id,
-                "chapter_no":chapter,
-                "retry":false,
-                "force_retry":false
+                "translate": "ai",
+                "language": language,
+                "raw_id": id,
+                "chapter_no": chapter,
+                "retry": false,
+                "force_retry": false
             };
         let header = {"Content-Type": "application/json;charset=UTF-8"};
         let options = {
@@ -964,8 +966,27 @@ class WtrlabParser extends Parser {
             headers: header,
             parser: this
         };
+
+        // 1. Fetch the initial JSON
         let json = (await HttpClient.fetchJson(fetchUrl, options)).json;
-        console.log(`[${new Date().toLocaleString()}] [WtrlabParser] JSON:`, json);
+
+        // 2. Fetch content from content_url if it exists
+        if (json && json.content_url) {
+            let contentFetchUrl = "https://wtr-lab.com" + json.content_url;
+            let contentJson = (await HttpClient.fetchJson(contentFetchUrl)).json;
+
+            // 3. Inject the "data" object right after "chapter" to match your desired schema structure
+            let combinedJson = {};
+            for (let key in json) {
+                combinedJson[key] = json[key];
+                if (key === "chapter") {
+                    combinedJson.data = contentJson.data; // Extracts the inner data block
+                }
+            }
+            json = combinedJson;
+            console.log(`[${new Date().toLocaleString()}] [WtrlabParser] JSON:`, json);
+        }
+
         return this.buildChapter(json, url);
     }
 
@@ -973,7 +994,7 @@ class WtrlabParser extends Parser {
         if (response.json?.code == "CHAPTER_LOCKED") {
             return true;
         }
-        if (response.json.data?.data?.body?false:true) {
+        if (response.json.content_url?false:true) {
             return true;
         }
         if (response.json.requireTurnstile) {
