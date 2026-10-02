@@ -740,6 +740,8 @@ class WtrlabParser extends Parser {
         this.description = serieData?.data?.description;
         this.author = serieData?.author;
         this.img = serieData?.data?.image;
+        this.chapters = serieData?.chapter_count;
+        this.characters = serieData?.char_count;
         return;
     }
 
@@ -895,6 +897,40 @@ class WtrlabParser extends Parser {
 
         if (unmatched.length) {
             console.warn("Unmatched Tailwind sets:", [...new Set(unmatched)]);
+        }
+
+        // Insert "Chapters" and "Characters" rows after the 4th child of the first info-card
+        const infoCard = node.querySelector(".info-card");
+        if (infoCard) {
+            const doc = node.ownerDocument;
+
+            const makeRow = (label, value) => {
+                const row = doc.createElement("div");
+                row.className = "info-row";
+
+                const labelEl = doc.createElement("span");
+                labelEl.className = "info-label";
+                labelEl.textContent = label;
+
+                const valueEl = doc.createElement("div");
+                valueEl.className = "info-value";
+                const valueSpan = doc.createElement("span");
+                valueSpan.textContent = value ?? "";
+                valueEl.appendChild(valueSpan);
+
+                row.append(labelEl, valueEl);
+                return row;
+            };
+
+            const chaptersRow = makeRow("Chapters", this.chapters);
+            const charactersRow = makeRow("Characters", this.characters);
+
+            const ref = infoCard.children[3]; // 4th child element
+            if (ref) {
+                ref.after(chaptersRow, charactersRow); // inserted in this order
+            } else {
+                infoCard.append(chaptersRow, charactersRow); // fewer than 4 rows: append at end
+            }
         }
     }
 
