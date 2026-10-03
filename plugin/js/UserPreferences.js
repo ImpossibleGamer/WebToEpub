@@ -207,6 +207,10 @@ class UserPreferences { // eslint-disable-line no-unused-vars
         if (serialized != null) {
             obj[DefaultParserSiteSettings.storageName] = JSON.parse(serialized);
         }
+        let extraStyleSheets = ParserStyleSheetSettings.read();
+        if (0 < Object.keys(extraStyleSheets).length) {
+            obj[ParserStyleSheetSettings.storageName] = extraStyleSheets;
+        }
         obj[ReadingList.storageName] = JSON.parse(this.readingList.toJson());
         for (let p of this.preferences) {
             obj[p.storageName] = p.value; 
@@ -233,6 +237,7 @@ class UserPreferences { // eslint-disable-line no-unused-vars
                 let json = JSON.parse(content);
                 this.loadOptionsFromJson(json);
                 this.loadDefaultParserFromJson(json);
+                this.loadParserStyleSheetsFromJson(json);
                 this.loadReadingListFromJson(json);
                 populateControls();
             } catch (err) {
@@ -260,6 +265,11 @@ class UserPreferences { // eslint-disable-line no-unused-vars
             let serialized = JSON.stringify(val);
             window.localStorage.setItem(DefaultParserSiteSettings.storageName, serialized);
         }
+    }
+
+    loadParserStyleSheetsFromJson(json) {
+        let val = json[ParserStyleSheetSettings.storageName];
+        ParserStyleSheetSettings.write(val === undefined ? {} : val);
     }
 
     loadReadingListFromJson(json) {
@@ -293,3 +303,59 @@ class UserPreferences { // eslint-disable-line no-unused-vars
         }
     }
 }
+
+/** Per-host overrides of a parser's extra stylesheet.
+ *  A key is present only when the user's text differs from the parser's default,
+ *  so an intentionally emptied textarea is stored as "" and is different from "no override".
+ */
+class ParserStyleSheetSettings { // eslint-disable-line no-unused-vars
+    static clean(obj) {
+        let cleaned = {};
+        if (obj !== null && typeof obj === "object" && !Array.isArray(obj)) {
+            for (let [hostName, css] of Object.entries(obj)) {
+                if (typeof css === "string") {
+                    cleaned[hostName] = css;
+                }
+            }
+        }
+        return cleaned;
+    }
+
+    static read() {
+        try {
+            let json = window.localStorage.getItem(ParserStyleSheetSettings.storageName);
+            return ParserStyleSheetSettings.clean(JSON.parse(json));
+        } catch {
+            return {};
+        }
+    }
+
+    static write(obj) {
+        let cleaned = ParserStyleSheetSettings.clean(obj);
+        if (Object.keys(cleaned).length === 0) {
+            window.localStorage.removeItem(ParserStyleSheetSettings.storageName);
+        } else {
+            window.localStorage.setItem(ParserStyleSheetSettings.storageName, JSON.stringify(cleaned));
+        }
+    }
+
+    /** @returns override for host, or null if there is none */
+    static get(hostName) {
+        let all = ParserStyleSheetSettings.read();
+        return Object.hasOwn(all, hostName) ? all[hostName] : null;
+    }
+
+    /** store css as override, or drop the override if css equals the parser's default */
+    static save(hostName, css, defaultCss) {
+        // <textarea>.value always uses "\n", but default CSS strings may contain "\r"
+        let normalize = s => (s ?? "").replace(/\r\n?/g, "\n");
+        let all = ParserStyleSheetSettings.read();
+        if (normalize(css) === normalize(defaultCss)) {
+            delete all[hostName];
+        } else {
+            all[hostName] = normalize(css);
+        }
+        ParserStyleSheetSettings.write(all);
+    }
+}
+ParserStyleSheetSettings.storageName = "ParserExtraStyleSheets";
