@@ -164,10 +164,12 @@ class ChapterUrlsUI {
         let startIndex = ChapterUrlsUI.selectionToRowIndex(ChapterUrlsUI.getRangeStartChapterSelect());
         let endIndex = ChapterUrlsUI.selectionToRowIndex(ChapterUrlsUI.getRangeEndChapterSelect());
         let rc = new ChapterUrlsUI.RangeCalculator();
+        let previouslyDownloadedRows = ChapterUrlsUI.getPreviouslyDownloadedRows();
 
         for (let row of ChapterUrlsUI.getTableRowsWithChapters()) {
             let inRange = rc.rowInRange(row);
-            ChapterUrlsUI.setRowCheckboxState(row, rc.rowInRange(row));
+            // previously downloaded chapters stay unchecked, even when inside the range
+            ChapterUrlsUI.setRowCheckboxState(row, inRange && !previouslyDownloadedRows.has(row));
             row.hidden = !inRange;
         }
         ChapterUrlsUI.setChapterCount(startIndex, endIndex);
@@ -176,6 +178,18 @@ class ChapterUrlsUI {
     static selectionToRowIndex(selectElement) {
         let selectedIndex = selectElement.selectedIndex;
         return selectedIndex + 1;
+    }
+
+    /** @private
+     * Rows whose chapter was flagged previousDownload by ReadingList.deselectOldChapters()
+     */
+    static getPreviouslyDownloadedRows() {
+        let pages = main.getCurrentParser()?.getPagesToFetch();
+        return new Set(
+            [...(pages?.values() ?? [])]
+                .filter(chapter => chapter.previousDownload)
+                .map(chapter => chapter.row)
+        );
     }
 
     /** @private */
