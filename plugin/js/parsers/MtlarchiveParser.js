@@ -110,6 +110,14 @@ class MtlarchiveParser extends Parser {
     async fetchChapter(url) {
         let path = url.replace("https://fictionzone.net", "");
         let token = await this.getAccessToken();
+        if (token == null) {
+            // Stop instead of silently packing a half chapter into the EPUB
+            throw new Error(
+                "fictionzone.net: not logged in (or login expired). " +
+                "Log in to fictionzone.net in this browser, then retry. " +
+                "Without login only about half of each chapter is available."
+            );
+        }
         let json = await this.fetchJsonFromSite(path, token);
         return this.buildChapter(json.data, url);
     }
