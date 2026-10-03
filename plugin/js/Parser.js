@@ -424,8 +424,14 @@ class Parser {
     }
 
     makeSaveAsFileNameWithoutExtension(title, useFullTitle) {
-        let maxFileNameLength = useFullTitle ? 512 : 20;
-        let fileName = (title == null)  ? "web" : util.safeForFileName(title, maxFileNameLength);
+        let fileName;
+        if (title == null) {
+            fileName = "web";
+        } else if (useFullTitle) {
+            fileName = util.safeForFullFileName(title, 512);
+        } else {
+            fileName = util.safeForFileName(title, 20);
+        }
         if (util.isStringWhiteSpace(fileName)) {
             // title is probably not English, so just use it as is
             fileName = title;
