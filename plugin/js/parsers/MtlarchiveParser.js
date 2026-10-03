@@ -111,15 +111,29 @@ class MtlarchiveParser extends Parser {
         let path = url.replace("https://fictionzone.net", "");
         let token = await this.getAccessToken();
         if (token == null) {
-            // Stop instead of silently packing a half chapter into the EPUB
             throw new Error(
                 "fictionzone.net: not logged in (or login expired). " +
                 "Log in to fictionzone.net in this browser, then retry. " +
                 "Without login only about half of each chapter is available."
             );
         }
+
         let json = await this.fetchJsonFromSite(path, token);
+
+        // Server says content is locked, so the chapter is truncated even though HTTP status was 200
+        if (this.isLoginRequiredResponse(json)) {
+            throw new Error(
+                "fictionzone.net: server returned a login-required response for '" + url + "' " +
+                "(message: " + json?.message + "). The chapter would be incomplete. " +
+                "Log in again in this browser and retry."
+            );
+        }
         return this.buildChapter(json.data, url);
+    }
+
+    isLoginRequiredResponse(json) {
+        // Matches "Please, Login to continue reading." without depending on exact wording/punctuation
+        return /log\s?in/i.test(json?.message ?? "");
     }
 
     buildChapter(json, url) {
