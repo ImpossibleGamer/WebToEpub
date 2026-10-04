@@ -32,11 +32,11 @@
 
 #extensionVersionSection {
     text-align: center;
+    padding-bottom: 2px;
 }
 
-#spanWebToEpubVersion {
+#spanExtensionVersion {
     display: inline-block;
-    text-align: center;
 }
 
 progress {

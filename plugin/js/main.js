@@ -486,6 +486,13 @@ var main = (function() {
         }
     }
 
+    function showExtensionVersion() {
+        let versionElement = document.getElementById("spanExtensionVersion");
+        if (versionElement) {
+            versionElement.textContent = `WebToEpub v${util.extensionVersion()}`;
+        }
+    }
+
     function clearCoverUrl() {
         CoverImageUI.setCoverImageUrl(null);
     }
@@ -707,6 +714,7 @@ var main = (function() {
         if (isRunningInTabMode()) { 
             ErrorLog.SuppressErrorLog =  false;
             localizeHtmlPage();
+            showExtensionVersion();
             getAdvancedOptionsSection().hidden = !userPreferences.advancedOptionsVisibleByDefault.value;
             getAdditionalMetadataSection().hidden = !userPreferences.ShowMoreMetadataOptions.value;
             addEventHandlers();
