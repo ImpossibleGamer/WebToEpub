@@ -736,7 +736,18 @@ class WtrlabParser extends Parser {
         this.title = serieData?.data?.title;
         this.description = serieData?.data?.description;
         this.author = serieData?.author;
-        this.img = serieData?.data?.image;
+
+        // Use the series image if present and non-empty, otherwise a placeholder
+        const image = serieData?.data?.image;
+        this.img = (typeof image === "string" && image.trim() !== "")
+            ? image
+            : "https://wtr-lab.com/placeholder.png";
+
+        // Find the raw whose id matches serieData.raw_id and use its slug as the source
+        const raws = json?.props.pageProps.serie?.raws || [];
+        const matchedRaw = raws.find(raw => raw.id === serieData?.raw_id);
+        this.source = matchedRaw?.slug;
+
         this.chapters = serieData?.chapter_count;
         this.characters = serieData?.char_count;
         return;
@@ -896,20 +907,12 @@ class WtrlabParser extends Parser {
             console.warn("Unmatched Tailwind sets:", [...new Set(unmatched)]);
         }
 
-        // Insert "Chapters" and "Characters" rows after the 4th child of the first info-card
+        // Insert "Chapters", "Characters" and "Source" rows after the 4th child of the first info-card
         const infoCard = node.querySelector(".info-card");
         if (infoCard) {
             const doc = node.ownerDocument;
 
-            // 1369 -> "1,369", 3196014 -> "3,196,014" (non-numeric values are left as they are)
-            const formatNumber = v => {
-                const n = Number(String(v ?? "").replace(/,/g, ""));
-                return v === "" || v == null || Number.isNaN(n)
-                    ? String(v ?? "")
-                    : n.toLocaleString("en-US");
-            };
-
-            const makeRow = (label, value) => {
+            const makeRow = (label, value, format = false) => {
                 const row = doc.createElement("div");
                 row.className = "info-row";
 
@@ -920,23 +923,32 @@ class WtrlabParser extends Parser {
                 const valueEl = doc.createElement("div");
                 valueEl.className = "info-value";
                 const valueSpan = doc.createElement("span");
-                valueSpan.textContent = formatNumber(value);
+                valueSpan.textContent = format ? this.formatNumber(value) : String(value ?? "");
                 valueEl.appendChild(valueSpan);
 
                 row.append(labelEl, valueEl);
                 return row;
             };
 
-            const chaptersRow = makeRow("Chapters", this.chapters);
-            const charactersRow = makeRow("Characters", this.characters);
+            const chaptersRow = makeRow("Chapters", this.chapters, true);
+            const charactersRow = makeRow("Characters", this.characters, true);
+            const sourceRow = makeRow("Source", this.source); // plain text, no number formatting
 
             const ref = infoCard.children[3]; // 4th child element
             if (ref) {
-                ref.after(chaptersRow, charactersRow);
+                ref.after(chaptersRow, charactersRow, sourceRow); // inserted in this order
             } else {
-                infoCard.append(chaptersRow, charactersRow);
+                infoCard.append(chaptersRow, charactersRow, sourceRow);
             }
         }
+    }
+
+    formatNumber(value) {
+        // 1369 -> "1,369", 3196014 -> "3,196,014" (non-numeric values are left as they are)
+        const n = Number(String(value ?? "").replace(/,/g, ""));
+        return value === "" || value == null || Number.isNaN(n)
+            ? String(value ?? "")
+            : n.toLocaleString("en-US");
     }
 
     async fetchChapter(url) {
