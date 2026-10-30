@@ -1098,7 +1098,9 @@ class WtrlabParser extends Parser {
                 107: "gemini-3.6-flash",
                 108: "gemini-3.5-flash-lite",
                 109: "gemini-3.7-flash",
+                110: "gemini-3.8-flash",
                 201: "deepseek-chat",
+                202: "deepseek-v4-flash",
                 301: "kimi-k2-instruct-0905",
                 302: "gpt-oss-120b",
                 501: "mistral-large"
