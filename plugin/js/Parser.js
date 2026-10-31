@@ -569,7 +569,7 @@ class Parser {
             }
             chapters = this.cleanWebPageUrls(chapters);
             chapters?.forEach(chapter => chapter.title = chapter.title?.trim());
-            await this.userPreferences.readingList.deselectOldChapters(url, chapters);
+            await this.userPreferences.readingList.deselectOldChapters(url, chapters, this.userPreferences.markOnlyChaptersInEpubAsDownloaded.value);
             chapterUrlsUI.populateChapterUrlsTable(chapters);
             if (0 < chapters.length) {
                 if (chapters[0].sourceUrl === url) {

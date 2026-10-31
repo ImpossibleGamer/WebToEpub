@@ -40,9 +40,25 @@ class ReadingList {
         return this.epubs.get(url);
     }
 
-    async deselectOldChapters(url, chapterList) {
+    async deselectOldChapters(url, chapterList, onlyChaptersInEpub = false) {
         let oldUrl = this.epubs.get(url);
         if (oldUrl != null) {
+            // Mark only chapters found in the Library EPUB
+            if (onlyChaptersInEpub) {
+                let epubChapterUrls = await Library.LibGetSourceChapterList(url);
+                if (epubChapterUrls != null) {
+                    let inEpub = new Set(epubChapterUrls);
+                    let matched = chapterList.filter(c => inEpub.has(c.sourceUrl));
+                    // zero matches (e.g. site changed URL scheme): fall through to prefix behaviour
+                    if (0 < matched.length) {
+                        for (let chapter of matched) {
+                            chapter.isIncludeable = false;
+                            chapter.previousDownload = true;
+                        }
+                        return;
+                    }
+                }
+            }
             let foundLastURL = false;
             for (let i = 0; i < chapterList.length; ++i) {
                 if (oldUrl === chapterList[i].sourceUrl) {

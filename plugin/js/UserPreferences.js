@@ -131,6 +131,7 @@ class UserPreferences { // eslint-disable-line no-unused-vars
         this.disableShiftClickAlert = this.addPreference("disableShiftClickAlert", "disableShiftClickAlertCheckbox", false);
         this.disableImageResError = this.addPreference("disableImageResError", "disableImageResErrorCheckbox", false);
         this.disableWebpImageFormatError = this.addPreference("disableWebpImageFormatError", "disableWebpImageFormatErrorCheckbox", false);
+        this.markOnlyChaptersInEpubAsDownloaded = this.addPreference("markOnlyChaptersInEpubAsDownloaded", "markOnlyChaptersInEpubAsDownloadedCheckbox", false);
 
         document.getElementById("themeColorTag").addEventListener("change", UserPreferences.SetTheme);
     }
