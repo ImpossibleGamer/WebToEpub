@@ -138,6 +138,22 @@ var main = (function() {
         }
     }
 
+    // shows section#reAddWarningSection, resolves true (Continue) or false (Cancel)
+    function askReAddDownloadedChapters() {
+        return new Promise(resolve => {
+            let sections = new Map([...document.querySelectorAll("section")].map(s => [s, s.hidden]));
+            [...sections.keys()].forEach(s => s.hidden = true);
+            document.getElementById("reAddWarningText").textContent = UIText.Warning.warningReAddDownloadedChapters;
+            document.getElementById("reAddWarningSection").hidden = false;
+            let finish = (answer) => {
+                sections.forEach((hidden, section) => section.hidden = hidden);
+                resolve(answer);
+            };
+            document.getElementById("reAddWarningContinue").onclick = () => finish(true);
+            document.getElementById("reAddWarningCancel").onclick = () => finish(false);
+        });
+    }
+
     async function fetchContentAndPackEpub() {
         util.resetSleepController();
         let libclick = this;
@@ -157,6 +173,16 @@ var main = (function() {
         }
 
         ChapterUrlsUI.limitNumOfChapterS(userPreferences.maxChaptersPerEpub.value);
+        // warn before re-adding downloaded chapters to an existing Library story (Add to Library only, not batch runs)
+        if (("yes" == libclick.dataset.libclick)
+            && !libclick.dataset.libsuppressErrorLog
+            && !userPreferences.replaceChaptersInLibraryEpub.value
+            && [...parser.getPagesToFetch().values()].some(c => c.isIncludeable && c.previousDownload)
+            && await Library.LibIsStoryInLibrary(document.getElementById("startingUrlInput").value)) {
+            if (!(await askReAddDownloadedChapters())) {
+                return;
+            }
+        }
         ChapterUrlsUI.resetDownloadStateImages();
         ErrorLog.clearHistory();
         window.workInProgress = true;

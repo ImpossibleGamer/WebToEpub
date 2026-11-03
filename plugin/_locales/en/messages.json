@@ -131,6 +131,10 @@
 		"message": "Cancel",
 		"description": "Label on 'Cancel' button when show error"
 	},
+	"__MSG_button_error_Continue__": {
+		"message": "Continue",
+		"description": "Label on 'Continue' button of the warning shown before re-adding downloaded chapters to an existing Library story"
+	},
 	"__MSG_button_error_Skip__": {
 		"message": "Skip",
 		"description": "Label on 'Skip' button when show error"
@@ -559,6 +563,10 @@
 		"message": "Mark only chapters found in the Library EPUB as downloaded",
 		"description": "Label for checkbox. When ticked, only chapters that are actually in the EPUB stored in the Library are marked as previously downloaded, instead of every chapter up to the last one."
 	},
+	"__MSG_label_Replace_Existing_Chapters_In_Library_Epub__": {
+		"message": "Replace existing chapters in Library EPUB (instead of adding them again at the end)",
+		"description": "Label for checkbox. When ticked, a chapter that is already in the Library EPUB (same URL) is replaced in place when it is fetched again with Add to Library."
+	},
 	"__MSG_label_Write_Error_History_To_File__": {
 		"message": "Write error messages to file",
 		"description": "Label for checkbox to write recent error messages to file"
@@ -823,6 +831,10 @@
 				"content": "$1"
 			}
 		}
+	},
+	"warningReAddDownloadedChapters": {
+		"message": "Some selected chapters were already downloaded and are in this story's EPUB in the Library.\nIf you continue, they will be added again at the end of the EPUB as duplicates.\n\nTo replace the existing chapters instead, tick 'Replace existing chapters in Library EPUB' in Advanced Options.\n\nClick 'Continue' to add them again, or 'Cancel' to go back.",
+		"description": "Confirmation shown on Add to Library when previously downloaded chapters are selected, the story is already in the Library, and the replace option is off."
 	},
 	"warningNoChapterUrl": {
 		"message": "ERROR: No Chapter URL supplied to test against.",

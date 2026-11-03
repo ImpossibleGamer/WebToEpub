@@ -132,6 +132,7 @@ class UserPreferences { // eslint-disable-line no-unused-vars
         this.disableImageResError = this.addPreference("disableImageResError", "disableImageResErrorCheckbox", false);
         this.disableWebpImageFormatError = this.addPreference("disableWebpImageFormatError", "disableWebpImageFormatErrorCheckbox", false);
         this.markOnlyChaptersInEpubAsDownloaded = this.addPreference("markOnlyChaptersInEpubAsDownloaded", "markOnlyChaptersInEpubAsDownloadedCheckbox", false);
+        this.replaceChaptersInLibraryEpub = this.addPreference("replaceChaptersInLibraryEpub", "replaceChaptersInLibraryEpubCheckbox", false);
 
         document.getElementById("themeColorTag").addEventListener("change", UserPreferences.SetTheme);
     }

@@ -84,6 +84,7 @@ class UIText { // eslint-disable-line no-unused-vars
     static Warning = {
         warningNoChapterUrl: chrome.i18n.getMessage("warningNoChapterUrl"),
         warningNoVisibleContent: (url) => chrome.i18n.getMessage("warningNoVisibleContent", [url]),
+        warningReAddDownloadedChapters: chrome.i18n.getMessage("warningReAddDownloadedChapters"),
         warning403ErrorResponse: (hostname) => chrome.i18n.getMessage("warning403ErrorResponse", [hostname]),
         warning429ErrorResponse: (hostname) => chrome.i18n.getMessage("warning429ErrorResponse", [hostname]),
         warningParserDisabledComradeMao: chrome.i18n.getMessage("warningParserDisabledComradeMao"),

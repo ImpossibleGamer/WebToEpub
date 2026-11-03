@@ -36,7 +36,7 @@ class Library { // eslint-disable-line no-unused-vars
         }
 
         let PreviousEpubBase64 = await Library.LibGetFromStorage("LibEpub" + LibidURL);
-        let MergedEpub = await Library.LibMergeEpub(PreviousEpubBase64, AddEpub, LibidURL);
+        let MergedEpub = await Library.LibMergeEpub(PreviousEpubBase64, AddEpub, LibidURL, Library.userPreferences.replaceChaptersInLibraryEpub.value);
         if (document.getElementById("LibDownloadEpubAfterUpdateCheckbox").checked) {
             chrome.storage.local.set({
                 ["LibNewChapterCount" + LibidURL]: "-1"
@@ -57,7 +57,58 @@ class Library { // eslint-disable-line no-unused-vars
         return Math.max(...array);
     }
 
-    static async LibMergeEpub(PreviousEpubBase64, AddEpubBlob, LibidURL) {
+    // helpers for chapter replacement, image dedup and the existing-story check
+    static async LibSha256Hex(blob) {
+        let digest = await crypto.subtle.digest("SHA-256", await blob.arrayBuffer());
+        return [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, "0")).join("");
+    }
+
+    // returns Map: 4 digit chapter number -> { url, href }, read from content.opf (dc:source + manifest)
+    static LibGetChapterSourceMap(opfText) {
+        let opf = new DOMParser().parseFromString(opfText, "application/xml");
+        let items = [...opf.getElementsByTagName("item")];
+        let chapters = new Map();
+        for (let source of opf.getElementsByTagName("dc:source")) {
+            let match = /^id\.xhtml(\d{4})$/.exec(source.getAttribute("id") ?? "");
+            if (match == null) {
+                continue;
+            }
+            let item = items.find(i => i.getAttribute("id") == "xhtml" + match[1]);
+            if (item != null) {
+                chapters.set(match[1], { url: source.textContent.trim(), href: item.getAttribute("href") });
+            }
+        }
+        return chapters;
+    }
+
+    // true if a story with this TOC URL is stored in the Library (no unzipping)
+    static async LibIsStoryInLibrary(url) {
+        let ids = await Library.LibGetStorageIDs();
+        let keys = ids.map(a => "LibStoryURL" + a);
+        let urls = await Library.LibGetFromStorageArray(keys);
+        return keys.some(k => urls[k] == url);
+    }
+
+    // pattern for a chapter's own TOC entry, i.e. an entry with no child entries.
+    // An arc entry has child entries, so it never matches. Groups: (before label)(label)(after label)
+    static LibTocLeafPattern(href, isNcx) {
+        let escaped = href.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        return isNcx
+            ? new RegExp("(<navLabel>\\s*<text>)([^<]*)(</text>\\s*</navLabel>\\s*<content src=\"" + escaped + "\"\\s*/>\\s*</navPoint>)")
+            : new RegExp("(<li>\\s*<a href=\"" + escaped + "\">)([^<]*)(</a>\\s*</li>)");
+    }
+
+    // label of the chapter's own entry in a toc.ncx text, or null if it has none
+    static LibGetTocLeafLabel(ncxText, href) {
+        return ncxText.match(Library.LibTocLeafPattern(href, true))?.[2] ?? null;
+    }
+
+    // replaces the label of the chapter's own entry (isNcx: toc.ncx, otherwise toc.xhtml)
+    static LibSetTocLeafLabel(tocText, href, label, isNcx) {
+        return tocText.replace(Library.LibTocLeafPattern(href, isNcx), (match, before, oldLabel, after) => before + label + after);
+    }
+
+    static async LibMergeEpub(PreviousEpubBase64, AddEpubBlob, LibidURL, replaceExisting = false) {
         Library.LibShowLoadingText();
 
         let PreviousEpubReader = await new zip.Data64URIReader(PreviousEpubBase64);
@@ -70,6 +121,32 @@ class Library { // eslint-disable-line no-unused-vars
         let AddEpubContent = await AddEpubZip.getEntries();
         AddEpubContent = AddEpubContent.filter(a => a.directory == false);
 
+        // find chapters to replace (matched by URL, strict ===) and prepare image dedup
+        let Replacements = new Map();      // new chapter number -> { number, href } of the old chapter
+        let ReplacedOldFiles = new Set();  // old chapter files that are not copied
+        if (replaceExisting) {
+            let OldChapters = Library.LibGetChapterSourceMap(await PreviousEpubContent.filter(a => a.filename == "OEBPS/content.opf")[0].getData(new zip.TextWriter()));
+            let NewChapters = Library.LibGetChapterSourceMap(await AddEpubContent.filter(a => a.filename == "OEBPS/content.opf")[0].getData(new zip.TextWriter()));
+            let OldByUrl = new Map();
+            for (let [number, chapter] of OldChapters) {
+                // first occurrence wins; never replace the Information page
+                if (chapter.href != "Text/0000_Information.xhtml" && !OldByUrl.has(chapter.url)) {
+                    OldByUrl.set(chapter.url, { number: number, href: chapter.href });
+                }
+            }
+            for (let [number, chapter] of NewChapters) {
+                let old = OldByUrl.get(chapter.url);
+                if (old != null && chapter.href != "Text/0000_Information.xhtml") {
+                    Replacements.set(number, old);
+                    ReplacedOldFiles.add("OEBPS/" + old.href);
+                    OldByUrl.delete(chapter.url); // each old chapter is replaced at most once
+                }
+            }
+        }
+        let OldImageHashes = new Map();         // SHA-256 -> old image file name (first occurrence)
+        let OldImageHashedSizes = new Set();    // sizes of old images that were hashed
+        let NewImageSizes = new Set(AddEpubContent.filter(a => a.filename.startsWith("OEBPS/Images/")).map(a => a.uncompressedSize));
+
         let MergedEpubWriter = new zip.BlobWriter("application/epub+zip");
         let MergedEpubZip = new zip.ZipWriter(MergedEpubWriter,{useWebWorkers: false,compressionMethod: 8, extendedTimestamp: false});
         //Copy PreviousEpub in MergedEpub
@@ -78,7 +155,20 @@ class Library { // eslint-disable-line no-unused-vars
                 MergedEpubZip.add(element.filename, new zip.TextReader(await element.getData(new zip.TextWriter())), {compressionMethod: 0});
                 continue;
             }
-            MergedEpubZip.add(element.filename, new zip.BlobReader(await element.getData(new zip.BlobWriter())));
+            // old chapter files that are replaced are not copied
+            if (ReplacedOldFiles.has(element.filename)) {
+                continue;
+            }
+            // keep the blob so old images can be hashed (only when a new image has the same size)
+            let OldFileBlob = await element.getData(new zip.BlobWriter());
+            if (element.filename.startsWith("OEBPS/Images/") && NewImageSizes.has(OldFileBlob.size)) {
+                let OldImageHash = await Library.LibSha256Hex(OldFileBlob);
+                if (!OldImageHashes.has(OldImageHash)) {
+                    OldImageHashes.set(OldImageHash, element.filename);
+                }
+                OldImageHashedSizes.add(OldFileBlob.size);
+            }
+            MergedEpubZip.add(element.filename, new zip.BlobReader(OldFileBlob));
         }
 
         let ImagenumberPreviousEpub = Library.LibHighestFileNumber(PreviousEpubContent, new RegExp("OEBPS/Images/[0-9]{4}"), "OEBPS/Images/") + 1;
@@ -107,6 +197,8 @@ class Library { // eslint-disable-line no-unused-vars
 
             AddEpubTextFile = AddEpubTextFile[0];
             let AddEpubTextFilestring = await AddEpubTextFile.getData(new zip.TextWriter());
+            // image path changes for this chapter, applied in a single pass after the image loop
+            let ImageRewrites = new Map();
             // eslint-disable-next-line
             while ((AddEpubImageFile = AddEpubImageFolder.filter(a => a.filename == AddEpubImageFolderFilenames[ImagenumberAddEpubIndex])).length != 0) {
                 AddEpubImageFile = AddEpubImageFile[0];
@@ -114,9 +206,19 @@ class Library { // eslint-disable-line no-unused-vars
                 if (AddEpubTextFilestring.search(AddEpubImageFile.filename.replace("OEBPS/", ""))==-1) {
                     break;
                 }
+                //reuse a byte-identical image already in the old EPUB instead of adding a copy
+                let NewImageBlob = await AddEpubImageFile.getData(new zip.BlobWriter());
+                if (OldImageHashedSizes.has(NewImageBlob.size)) {
+                    let ReusedImage = OldImageHashes.get(await Library.LibSha256Hex(NewImageBlob));
+                    if (ReusedImage != null) {
+                        ImageRewrites.set(AddEpubImageFile.filename.replace("OEBPS", ""), ReusedImage.replace("OEBPS", ""));
+                        ImagenumberAddEpubIndex++;
+                        continue;
+                    }
+                }
                 // eslint-disable-next-line
-                MergedEpubZip.add(AddEpubImageFile.filename.replace(("0000"+ImagenumberAddEpub).slice(-4),("0000"+ImagenumberPreviousEpub).slice(-4)),  new zip.BlobReader(await AddEpubImageFile.getData(new zip.BlobWriter())));
-                AddEpubTextFilestring = AddEpubTextFilestring.replace(AddEpubImageFile.filename.replace("OEBPS", ""), AddEpubImageFile.filename.replace("OEBPS", "").replace(("/Images/0000"+ImagenumberAddEpub).slice(-4), ("/Images/0000"+ImagenumberPreviousEpub).slice(-4)));
+                MergedEpubZip.add(AddEpubImageFile.filename.replace(("0000"+ImagenumberAddEpub).slice(-4),("0000"+ImagenumberPreviousEpub).slice(-4)),  new zip.BlobReader(NewImageBlob));
+                ImageRewrites.set(AddEpubImageFile.filename.replace("OEBPS", ""), AddEpubImageFile.filename.replace("OEBPS", "").replace(("/Images/0000"+ImagenumberAddEpub).slice(-4), ("/Images/0000"+ImagenumberPreviousEpub).slice(-4)));
                 // eslint-disable-next-line
                 regex1 = new RegExp('<dc:source id="id.image'+(("0000"+ImagenumberAddEpub).slice(-4))+'">'+".+?<\/dc:source>");
                 regex2 = ("0000"+ImagenumberAddEpub).slice(-4);
@@ -136,6 +238,41 @@ class Library { // eslint-disable-line no-unused-vars
                 PreviousEpubContentText = Library.LibManipulateContentFromTO(AddEpubContentText, PreviousEpubContentText, regex1, string1, regex2, string2, regex3, string3);
                 ImagenumberAddEpubIndex++;
                 ImagenumberPreviousEpub++;
+            }
+            // apply all image path rewrites in one pass (a rewritten path can never be rewritten again)
+            if (0 < ImageRewrites.size) {
+                let ImageRewritePattern = new RegExp([...ImageRewrites.keys()].map(k => k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|"), "g");
+                AddEpubTextFilestring = AddEpubTextFilestring.replace(ImageRewritePattern, m => ImageRewrites.get(m));
+            }
+            // replace the old chapter instead of appending
+            let ChapterReplacement = Replacements.get(("0000"+TextnumberAddEpub).slice(-4));
+            if (ChapterReplacement != null) {
+                // new chapter takes the old chapter's number, so id, spine and dc:source stay valid
+                let ReplacedChaptername = AddEpubTextFile.filename.replace(("0000"+TextnumberAddEpub).slice(-4), ChapterReplacement.number);
+                MergedEpubZip.add(ReplacedChaptername, new zip.TextReader(AddEpubTextFilestring));
+                let OldHref = ChapterReplacement.href;
+                let NewHref = ReplacedChaptername.slice(6);
+                if ("OEBPS/" + ChapterReplacement.href != ReplacedChaptername) {
+                    // title part of the file name changed: update manifest and both tables of contents
+                    // (an arc entry shares the file, so all occurrences are replaced)
+                    PreviousEpubContentText = PreviousEpubContentText.replaceAll(OldHref, NewHref);
+                    PreviousEpubTocText = PreviousEpubTocText.replaceAll(OldHref, NewHref);
+                    if (PreviousEpubTocEpub3Text != null) {
+                        PreviousEpubTocEpub3Text = PreviousEpubTocEpub3Text.replaceAll(OldHref, NewHref);
+                    }
+                }
+                // update the label of the chapter's own TOC entry from the new EPUB's toc.ncx (also when the file name did not change)
+                // arc entries have child entries, so the leaf pattern never matches them and their labels stay as they are
+                let NewTocLabel = Library.LibGetTocLeafLabel(AddEpubTocText, AddEpubTextFile.filename.slice(6));
+                if (NewTocLabel != null) {
+                    PreviousEpubTocText = Library.LibSetTocLeafLabel(PreviousEpubTocText, NewHref, NewTocLabel, true);
+                    if (PreviousEpubTocEpub3Text != null) {
+                        PreviousEpubTocEpub3Text = Library.LibSetTocLeafLabel(PreviousEpubTocEpub3Text, NewHref, NewTocLabel, false);
+                    }
+                }
+                // not appended, so TextnumberPreviousEpub and NewChapter do not change
+                TextnumberAddEpub++;
+                continue;
             }
             let newChaptername = AddEpubTextFile.filename.replace(("0000"+TextnumberAddEpub).slice(-4),("0000"+TextnumberPreviousEpub).slice(-4));
             MergedEpubZip.add(newChaptername, new zip.TextReader(AddEpubTextFilestring));

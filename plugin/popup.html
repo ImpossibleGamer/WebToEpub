@@ -35,6 +35,11 @@
                 </tr>
             </table>
         </section>
+        <section id="reAddWarningSection" class="minWidth" hidden="true">
+            <p id="reAddWarningText" style="white-space: pre-line;"></p>
+            <button class="expandedButton" id="reAddWarningContinue" style="margin-left:4px; margin-right: 4px;">__MSG_button_error_Continue__</button>
+            <button class="expandedButton" id="reAddWarningCancel" style="margin-left:4px; margin-right: 4px;">__MSG_button_error_Cancel__</button>
+        </section>
         <section id="defaultParserSection" hidden="true">
             <p class="i18n">__MSG_label_Using_Default_Parser__</p>
             <table>
@@ -457,6 +462,10 @@
                     <tr id="markOnlyChaptersInEpubAsDownloadedRow">
                         <td><input id="markOnlyChaptersInEpubAsDownloadedCheckbox" type="checkbox" name="markOnlyChaptersInEpubAsDownloadedCheckbox" value="false"></td>
                         <td>__MSG_label_Mark_Only_Chapters_In_Epub_As_Downloaded__</td>
+                    </tr>
+                    <tr id="replaceChaptersInLibraryEpubRow">
+                        <td><input id="replaceChaptersInLibraryEpubCheckbox" type="checkbox" name="replaceChaptersInLibraryEpubCheckbox" value="false"></td>
+                        <td>__MSG_label_Replace_Existing_Chapters_In_Library_Epub__</td>
                     </tr>
                     <tr id="writeErrorHistoryToFileRow">
                         <td><input id="writeErrorHistoryToFileCheckbox" type="checkbox" name="writeErrorHistoryToFileCheckbox" value="false"></td>
