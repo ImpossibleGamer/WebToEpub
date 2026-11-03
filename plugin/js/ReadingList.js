@@ -105,6 +105,13 @@ class ReadingList {
                     this.epubs.set(url, c.sourceUrl);
                 }
             }
+            // the stored last chapter only moves forward
+            let allChapters = [...chapterList];
+            let oldIndex = allChapters.findIndex(c => c.sourceUrl === oldUrl);
+            let newIndex = allChapters.findIndex(c => c.sourceUrl === this.epubs.get(url));
+            if ((0 <= oldIndex) && (newIndex < oldIndex)) {
+                this.epubs.set(url, oldUrl);
+            }
             if (oldUrl !== this.epubs.get(url)) {
                 this.writeToLocalStorage();
             }
