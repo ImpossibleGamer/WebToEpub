@@ -87,6 +87,10 @@
 		"message": " new",
 		"description": "Label of x new chapter"
 	},
+	"__MSG_label_Lib_Template_Replaced_Chapter__": {
+		"message": " updated",
+		"description": "Label of x updated (replaced) chapters"
+	},
 	"__MSG_label_Lib_Template_Story_URL__": {
 		"message": "Story URL",
 		"description": "Label in front of 'Story URL' input"
@@ -564,7 +568,7 @@
 		"description": "Label for checkbox. When ticked, only chapters that are actually in the EPUB stored in the Library are marked as previously downloaded, instead of every chapter up to the last one."
 	},
 	"__MSG_label_Replace_Existing_Chapters_In_Library_Epub__": {
-		"message": "Replace existing chapters in Library EPUB (instead of adding them again at the end)",
+		"message": "Replace existing chapters in Library EPUB",
 		"description": "Label for checkbox. When ticked, a chapter that is already in the Library EPUB (same URL) is replaced in place when it is fetched again with Add to Library."
 	},
 	"__MSG_label_Write_Error_History_To_File__": {

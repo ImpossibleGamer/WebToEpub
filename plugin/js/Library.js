@@ -39,7 +39,8 @@ class Library { // eslint-disable-line no-unused-vars
         let MergedEpub = await Library.LibMergeEpub(PreviousEpubBase64, AddEpub, LibidURL, Library.userPreferences.replaceChaptersInLibraryEpub.value);
         if (document.getElementById("LibDownloadEpubAfterUpdateCheckbox").checked) {
             chrome.storage.local.set({
-                ["LibNewChapterCount" + LibidURL]: "-1"
+                ["LibNewChapterCount" + LibidURL]: "-1",
+                ["LibReplacedChapterCount" + LibidURL]: "-1"
             });
             fileName = EpubPacker.addExtensionIfMissing(await Library.LibGetFromStorage("LibFilename" + LibidURL));
             if (Download.isFileNameIllegalOnWindows(fileName)) {
@@ -108,6 +109,13 @@ class Library { // eslint-disable-line no-unused-vars
         return tocText.replace(Library.LibTocLeafPattern(href, isNcx), (match, before, oldLabel, after) => before + label + after);
     }
 
+    // fill the updated (replaced) chapter badge, empty when the count is 0
+    static async LibRenderReplacedChapterCount(libepubid, template) {
+        let count = await Library.LibGetFromStorage("LibReplacedChapterCount" + libepubid);
+        let html = ((count || 0) == 0) ? "" : count + template;
+        Library.AppendHtmlInDiv("<span class=\"replacedChapterWraper\">" + html + "</span>", document.getElementById("LibReplacedChapterCount" + libepubid), "replacedChapterWraper");
+    }
+
     static async LibMergeEpub(PreviousEpubBase64, AddEpubBlob, LibidURL, replaceExisting = false) {
         Library.LibShowLoadingText();
 
@@ -146,6 +154,7 @@ class Library { // eslint-disable-line no-unused-vars
         let OldImageHashes = new Map();         // SHA-256 -> old image file name (first occurrence)
         let OldImageHashedSizes = new Set();    // sizes of old images that were hashed
         let NewImageSizes = new Set(AddEpubContent.filter(a => a.filename.startsWith("OEBPS/Images/")).map(a => a.uncompressedSize));
+        let ReplacedChapter = 0;
 
         let MergedEpubWriter = new zip.BlobWriter("application/epub+zip");
         let MergedEpubZip = new zip.ZipWriter(MergedEpubWriter,{useWebWorkers: false,compressionMethod: 8, extendedTimestamp: false});
@@ -271,6 +280,7 @@ class Library { // eslint-disable-line no-unused-vars
                     }
                 }
                 // not appended, so TextnumberPreviousEpub and NewChapter do not change
+                ReplacedChapter++;
                 TextnumberAddEpub++;
                 continue;
             }
@@ -330,7 +340,7 @@ class Library { // eslint-disable-line no-unused-vars
             MergedEpubZip.add("OEBPS/toc.xhtml", new zip.TextReader(PreviousEpubTocEpub3Text));
         }
         let content = await MergedEpubZip.close();
-        Library.LibHandleUpdate(-1, content, await Library.LibGetFromStorage("LibStoryURL" + LibidURL), await Library.LibGetFromStorage("LibFilename" + LibidURL), LibidURL, NewChapter);
+        Library.LibHandleUpdate(-1, content, await Library.LibGetFromStorage("LibStoryURL" + LibidURL), await Library.LibGetFromStorage("LibFilename" + LibidURL), LibidURL, NewChapter, ReplacedChapter);
         return content;
     }
 
@@ -469,6 +479,7 @@ class Library { // eslint-disable-line no-unused-vars
         let LibTemplateUpdateNewChapter = document.getElementById("LibTemplateUpdateNewChapter").innerHTML;
         let LibTemplateDownload = document.getElementById("LibTemplateDownload").innerHTML;
         let LibTemplateNewChapter = document.getElementById("LibTemplateNewChapter").innerHTML;
+        let LibTemplateReplacedChapter = document.getElementById("LibTemplateReplacedChapter").innerHTML;
         let LibTemplateURL = document.getElementById("LibTemplateURL").innerHTML;
         let LibTemplateFilename = document.getElementById("LibTemplateFilename").innerHTML;
         let LibTemplateMergeUploadButton = "";
@@ -510,8 +521,9 @@ class Library { // eslint-disable-line no-unused-vars
                 LibRenderString += "<tr>";
                 for (let j = i; j < CurrentLibKeys.length && j < column + i; j++) {
                     LibRenderString += "<td style='height: 1.2em;'>";
-                    LibRenderString += "<div style='display:flex; justify-content: center;'>";
+                    LibRenderString += "<div style='display:flex; justify-content: center; gap: 0.5em;'>";
                     LibRenderString += "<span style='padding: 0em; font-size: 1.2em; color: Chartreuse;' id='LibNewChapterCount"+CurrentLibKeys[j]+"'></span>";
+                    LibRenderString += "<span style='padding: 0em; font-size: 1.2em; color: Orange;' id='LibReplacedChapterCount"+CurrentLibKeys[j]+"'></span>";
                     LibRenderString += "</div>";
                     LibRenderString += "</td>";
                 }
@@ -537,6 +549,7 @@ class Library { // eslint-disable-line no-unused-vars
                 let newChapterHTML = (((await Library.LibGetFromStorage("LibNewChapterCount"+CurrentLibKeys[i]) || 0) == 0)? "" : await Library.LibGetFromStorage("LibNewChapterCount"+CurrentLibKeys[i]) + LibTemplateNewChapter);
                 newChapterHTML = "<span class=\"newChapterWraper\">"+newChapterHTML+"</span>";
                 Library.AppendHtmlInDiv(newChapterHTML, document.getElementById("LibNewChapterCount"+CurrentLibKeys[i]), "newChapterWraper");
+                await Library.LibRenderReplacedChapterCount(CurrentLibKeys[i], LibTemplateReplacedChapter);
             }
         } else {
             for (let i = 0; i < CurrentLibKeys.length; i++) {
@@ -553,7 +566,8 @@ class Library { // eslint-disable-line no-unused-vars
                 LibRenderString += "<button data-libepubid="+CurrentLibKeys[i]+" id='LibDeleteEpub"+CurrentLibKeys[i]+"'>"+LibTemplateDeleteEpub+"</button>";
                 LibRenderString += "<button data-libepubid="+CurrentLibKeys[i]+" id='LibUpdateNewChapter"+CurrentLibKeys[i]+"'>"+LibTemplateUpdateNewChapter+"</button>";
                 LibRenderString += "<button data-libepubid="+CurrentLibKeys[i]+" id='LibDownload"+CurrentLibKeys[i]+"'>"+LibTemplateDownload+"</button>";
-                LibRenderString += "<span style='padding: 1em; font-size: 1.2em; color: Chartreuse;' id='LibNewChapterCount"+CurrentLibKeys[i]+"'></span>";
+                LibRenderString += "<span style='padding: 0 0.5em; font-size: 1.2em; color: Chartreuse;' id='LibNewChapterCount"+CurrentLibKeys[i]+"'></span>";
+                LibRenderString += "<span style='padding: 0 0.5em; font-size: 1.2em; color: Orange;' id='LibReplacedChapterCount"+CurrentLibKeys[i]+"'></span>";
                 if (ShowAdvancedOptions) {
                     LibRenderString += "</td>";
                     LibRenderString += "</tr>";
@@ -636,6 +650,7 @@ class Library { // eslint-disable-line no-unused-vars
                 let newChapterHTML = (((await Library.LibGetFromStorage("LibNewChapterCount"+CurrentLibKeys[i]) || 0) == 0)? "" : await Library.LibGetFromStorage("LibNewChapterCount"+CurrentLibKeys[i]) + LibTemplateNewChapter);
                 newChapterHTML = "<span class=\"newChapterWraper\">"+newChapterHTML+"</span>";
                 Library.AppendHtmlInDiv(newChapterHTML, document.getElementById("LibNewChapterCount"+CurrentLibKeys[i]), "newChapterWraper");
+                await Library.LibRenderReplacedChapterCount(CurrentLibKeys[i], LibTemplateReplacedChapter);
                 document.getElementById("LibStoryURL"+CurrentLibKeys[i]).value = await Library.LibGetFromStorage("LibStoryURL"+CurrentLibKeys[i]);
                 document.getElementById("LibFilename"+CurrentLibKeys[i]).value = await Library.LibGetFromStorage("LibFilename"+CurrentLibKeys[i]);
             }
@@ -963,7 +978,7 @@ class Library { // eslint-disable-line no-unused-vars
         Library.AppendHtmlInDiv(LibRenderString, LibRenderResult, "LibDivRenderWraper");
     }
 
-    static async LibHandleUpdate(objbtn, Blobdata, StoryURL, Filename, Id, NewChapterCount) {
+    static async LibHandleUpdate(objbtn, Blobdata, StoryURL, Filename, Id, NewChapterCount, ReplacedChapterCount) {
         Library.LibShowLoadingText();
         Library.LibFileReaderAddListeners();
         if (objbtn != -1) {
@@ -973,10 +988,15 @@ class Library { // eslint-disable-line no-unused-vars
         if (NewChapterCount == null) {
             NewChapterCount = 0;
         }
+        // default to 0, so a value from an earlier call can never leak into this one
+        if (ReplacedChapterCount == null) {
+            ReplacedChapterCount = 0;
+        }
         LibFileReader.LibStorageValueURL = StoryURL;
         LibFileReader.LibStorageValueFilename = Filename;
         LibFileReader.LibStorageValueId = Id;
         LibFileReader.NewChapterCount = NewChapterCount;
+        LibFileReader.ReplacedChapterCount = ReplacedChapterCount;
         LibFileReader.readAsDataURL(Blobdata);
     }
 
@@ -1002,6 +1022,13 @@ class Library { // eslint-disable-line no-unused-vars
         if (IntStorageNewChapterCount != -1) {
             NewChapterCount = LibFileReader.NewChapterCount + parseInt(StorageNewChapterCount || "0");
         }
+        // same accumulation for the replaced count ("-1" resets it)
+        let StorageReplacedChapterCount = await Library.LibGetFromStorage("LibReplacedChapterCount" + LibFileReader.LibStorageValueId);
+        let IntStorageReplacedChapterCount = parseInt(StorageReplacedChapterCount || "0");
+        let ReplacedChapterCount = 0;
+        if (IntStorageReplacedChapterCount != -1) {
+            ReplacedChapterCount = LibFileReader.ReplacedChapterCount + parseInt(StorageReplacedChapterCount || "0");
+        }
         //Catch Firefox upload wrong Content-Type
         let result = LibFileReader.result;
         if (result.startsWith("data:application/octet-stream;base64,")) {
@@ -1012,7 +1039,8 @@ class Library { // eslint-disable-line no-unused-vars
             ["LibEpub" + LibFileReader.LibStorageValueId]: result,
             ["LibStoryURL" + LibFileReader.LibStorageValueId]: LibFileReader.LibStorageValueURL,
             ["LibFilename" + LibFileReader.LibStorageValueId]: LibFileReader.LibStorageValueFilename,
-            ["LibNewChapterCount" + LibFileReader.LibStorageValueId]: NewChapterCount
+            ["LibNewChapterCount" + LibFileReader.LibStorageValueId]: NewChapterCount,
+            ["LibReplacedChapterCount" + LibFileReader.LibStorageValueId]: ReplacedChapterCount
         }, async function() {
             await Library.LibCreateStorageIDs(parseInt(LibFileReader.LibStorageValueId));
             await Library.LibSaveCoverImgInStorage(LibFileReader.LibStorageValueId);
@@ -1100,7 +1128,7 @@ class Library { // eslint-disable-line no-unused-vars
     
     static async LibDeleteEpub(objbtn) {
         await Library.LibRemoveStorageIDs(objbtn.dataset.libepubid);
-        let LibRemove = ["LibEpub" + objbtn.dataset.libepubid, "LibStoryURL" + objbtn.dataset.libepubid, "LibFilename" + objbtn.dataset.libepubid, "LibCover" + objbtn.dataset.libepubid, "LibNewChapterCount" + objbtn.dataset.libepubid];
+        let LibRemove = ["LibEpub" + objbtn.dataset.libepubid, "LibStoryURL" + objbtn.dataset.libepubid, "LibFilename" + objbtn.dataset.libepubid, "LibCover" + objbtn.dataset.libepubid, "LibNewChapterCount" + objbtn.dataset.libepubid, "LibReplacedChapterCount" + objbtn.dataset.libepubid];
         Library.userPreferences.readingList.tryDeleteEpubAndSave(document.getElementById("LibStoryURL" + objbtn.dataset.libepubid).value);
         chrome.storage.local.remove(LibRemove);
         Library.LibRenderSavedEpubs();
@@ -1142,9 +1170,10 @@ class Library { // eslint-disable-line no-unused-vars
             let userPreferences = UserPreferences.readFromLocalStorage();
             let overwriteExisting = userPreferences.overwriteExistingEpub.value;
             let backgroundDownload = userPreferences.noDownloadPopup.value;
-            let LibRemove = ["LibNewChapterCount" + objbtn.dataset.libepubid];
+            let LibRemove = ["LibNewChapterCount" + objbtn.dataset.libepubid, "LibReplacedChapterCount" + objbtn.dataset.libepubid];
             chrome.storage.local.remove(LibRemove);
             document.getElementById("LibNewChapterCount"+objbtn.dataset.libepubid).innerHTML = "";
+            document.getElementById("LibReplacedChapterCount"+objbtn.dataset.libepubid).innerHTML = "";
             let blobdata = await Library.LibConvertDataUrlToBlob(items["LibEpub" + objbtn.dataset.libepubid]);
             return Download.save(blobdata, (items["LibFilename" + objbtn.dataset.libepubid] + ".epub").trim(), overwriteExisting, backgroundDownload);
         });
@@ -1267,6 +1296,7 @@ class Library { // eslint-disable-line no-unused-vars
             zipWriter.add("Library/"+i+"/LibFilename", new zip.TextReader(await Library.LibGetFromStorage("LibFilename" + CurrentLibKeys[i])));
             zipWriter.add("Library/"+i+"/LibStoryURL", new zip.TextReader(await Library.LibGetFromStorage("LibStoryURL" + CurrentLibKeys[i])));
             zipWriter.add("Library/"+i+"/LibNewChapterCount", new zip.TextReader(await Library.LibGetFromStorage("LibNewChapterCount"+CurrentLibKeys[i]) ?? "0"));
+            zipWriter.add("Library/"+i+"/LibReplacedChapterCount", new zip.TextReader(await Library.LibGetFromStorage("LibReplacedChapterCount"+CurrentLibKeys[i]) ?? "0"));
         }
         zipWriter.add("ReadingList.json", new zip.TextReader(JSON.stringify(fileReadingList)));
         Download.save(await zipWriter.close(), "Libraryexport.zip").catch (err => ErrorLog.showErrorMessage(err));
@@ -1323,7 +1353,8 @@ class Library { // eslint-disable-line no-unused-vars
                 ["LibEpub" + HighestLibEpub]: await (await entries.filter((a) => a.filename == "Library/"+i+"/LibEpub")[0]).getData(new zip.TextWriter()),
                 ["LibFilename" + HighestLibEpub]: await (await entries.filter((a) => a.filename == "Library/"+i+"/LibFilename")[0]).getData(new zip.TextWriter()),
                 ["LibStoryURL" + HighestLibEpub]: await (await entries.filter((a) => a.filename == "Library/"+i+"/LibStoryURL")[0]).getData(new zip.TextWriter()),
-                ["LibNewChapterCount" + HighestLibEpub]: await (await entries.filter((a) => a.filename == "Library/"+i+"/LibNewChapterCount")[0])?.getData(new zip.TextWriter())??"0"
+                ["LibNewChapterCount" + HighestLibEpub]: await (await entries.filter((a) => a.filename == "Library/"+i+"/LibNewChapterCount")[0])?.getData(new zip.TextWriter())??"0",
+                ["LibReplacedChapterCount" + HighestLibEpub]: await (await entries.filter((a) => a.filename == "Library/"+i+"/LibReplacedChapterCount")[0])?.getData(new zip.TextWriter())??"0"
             });
             await Library.LibCreateStorageIDs(HighestLibEpub);
             HighestLibEpub++;
