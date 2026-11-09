@@ -1065,6 +1065,19 @@ class WtrlabParser extends Parser {
         return "https://"+hostname+"/"+language+"/novel/"+raw_id+"/"+this.slug+"/chapter-"+chapter_no+"?service="+translate;
     }
 
+    createModelSeparator(dom, modelName, aiId = null) {
+        let separator = dom.createElement("div");
+        separator.className = "separator";
+        let modelSpan = dom.createElement("span");
+        modelSpan.className = "model";
+        if (aiId !== null && aiId !== undefined) {
+            modelSpan.dataset.ai_id = aiId;
+        }
+        modelSpan.textContent = modelName;
+        separator.appendChild(modelSpan);
+        return separator;
+    }
+
     buildChapter(json, url) {
         let newDoc = Parser.makeEmptyDocForContent(url);
 
@@ -1077,48 +1090,9 @@ class WtrlabParser extends Parser {
         this.applyTermsToElement(title, titleText, mergedTerms, newDoc.dom);
         newDoc.content.appendChild(title);
 
-        // Add model separator if model exists
-        if (json?.data?.data?.model) {
-            let separator = newDoc.dom.createElement("div");
-            separator.className = "separator";
-            let modelSpan = newDoc.dom.createElement("span");
-            modelSpan.className = "model";
-            modelSpan.dataset.ai_id = json?.data?.ai_id ?? "Unknown";
-            modelSpan.textContent = json.data.data.model;
-            separator.appendChild(modelSpan);
-            newDoc.content.appendChild(separator);
-        } else if (json?.data?.ai_id) {
-            const aiIdMap = {
-                101: "gemini-3.0-flash",
-                102: "gemini-2.5-flash",
-                103: "gemini-2.0-flash",
-                104: "gemini-2.5-flash-lite",
-                105: "gemini-3.1-flash-lite",
-                106: "gemini-3.5-flash",
-                107: "gemini-3.6-flash",
-                108: "gemini-3.5-flash-lite",
-                109: "gemini-3.7-flash",
-                110: "gemini-3.8-flash",
-                201: "deepseek-chat",
-                202: "deepseek-v4-flash",
-                301: "kimi-k2-instruct-0905",
-                302: "gpt-oss-120b",
-                501: "mistral-large"
-            };
-            let separator = newDoc.dom.createElement("div");
-            separator.className = "separator";
-            let modelSpan = newDoc.dom.createElement("span");
-            modelSpan.className = "model";
-            modelSpan.dataset.ai_id = json.data.ai_id;
-            modelSpan.textContent = aiIdMap[json.data.ai_id] ?? "Unknown";
-            separator.appendChild(modelSpan);
-            newDoc.content.appendChild(separator);
-        }
-
         // Create content div
         let contentDiv = newDoc.dom.createElement("div");
         contentDiv.className = "content";
-        // contentDiv.id = json.data.chapter_id;
         contentDiv.dataset.chapterId = json.data.chapter_id;
         contentDiv.dataset.createdAt = json.data.created_at;
         if (json?.tasks[0]?.created_at) {
@@ -1126,16 +1100,40 @@ class WtrlabParser extends Parser {
         }
         contentDiv.dataset.fetchedAt = new Date().toISOString();
 
+        // Add model separator if model exists
+        if (json?.data?.data?.model) {
+            let aiId = json?.data?.ai_id ?? "Unknown";
+            let separator = this.createModelSeparator(newDoc.dom, json.data.data.model, aiId);
+            contentDiv.appendChild(separator);
+        } else if (json?.data?.ai_id) {
+            let aiId = json.data.ai_id;
+            let modelName = AI_ID_MAP[aiId] ?? "Unknown";
+            let separator = this.createModelSeparator(newDoc.dom, modelName, aiId);
+            contentDiv.appendChild(separator);
+        }
+
         let imagecounter = 0;
         for (let element of json.data.data.body) {
-            if (element == "[image]") {
+            if (element === "[image]") {
                 let imgnode = newDoc.dom.createElement("img");
                 let imghref = json.data.data?.images?.[imagecounter++] ?? "";
-                if (imghref == "") {
+                if (imghref === "") {
                     continue;
                 }
                 imgnode.src = imghref;
                 contentDiv.appendChild(imgnode);
+            } else if (typeof element === "string" && element.startsWith("[part:") && element.endsWith("]")) {
+                let val = element.slice(6, -1);
+
+                if (Object.values(AI_ID_MAP).includes(val)) {
+                    let aiId = Object.keys(AI_ID_MAP).find(key => AI_ID_MAP[key] === val);
+                    let separator = this.createModelSeparator(newDoc.dom, val, aiId);
+                    contentDiv.appendChild(separator);
+                } else {
+                    let pnode = newDoc.dom.createElement("p");
+                    this.applyTermsToElement(pnode, element, mergedTerms, newDoc.dom);
+                    contentDiv.appendChild(pnode);
+                }
             } else {
                 let pnode = newDoc.dom.createElement("p");
                 this.applyTermsToElement(pnode, element, mergedTerms, newDoc.dom);
@@ -1423,3 +1421,21 @@ class WtrlabParser extends Parser {
         }
     }
 }
+
+const AI_ID_MAP = {
+    101: "gemini-3.0-flash",
+    102: "gemini-2.5-flash",
+    103: "gemini-2.0-flash",
+    104: "gemini-2.5-flash-lite",
+    105: "gemini-3.1-flash-lite",
+    106: "gemini-3.5-flash",
+    107: "gemini-3.6-flash",
+    108: "gemini-3.5-flash-lite",
+    109: "gemini-3.7-flash",
+    110: "gemini-3.8-flash",
+    201: "deepseek-chat",
+    202: "deepseek-v4-flash",
+    301: "kimi-k2-instruct-0905",
+    302: "gpt-oss-120b",
+    501: "mistral-large"
+};
