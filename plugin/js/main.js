@@ -270,31 +270,45 @@ var main = (function() {
         }
     }
 
-    function injectContentScript(tabId) {
+    async function injectContentScript(tabId) {
+        // If a user closes the tab they used to open the extension (i.e. new
+        // tab, settings page, etc), if they then reload the extension tab, the
+        // tab id becomes invalid. So, we use a try/catch to catch the error and
+        // just return without injecting.
+        let tab;
+        try {
+            // Checking for firefox here because `browser.*` requires minimum
+            // chrome version 148
+            tab = util.isFirefox()
+                ? await browser.tabs.get(tabId)
+                : await chrome.tabs.get(tabId);
+        } catch {
+            return;
+        }
+
+        const cannotReadUrl = !tab.url;
+        if (cannotReadUrl) {
+            return;
+        }
+
         if (util.isFirefox()) {
             return Firefox.injectContentScript(tabId);
         } else {
-            chromeInjectContentScript(tabId);
+            return chromeInjectContentScript(tabId);
         }
     }
 
     function chromeInjectContentScript(tabId) {
-        try {
-            chrome.scripting.executeScript({
-                target: {tabId: tabId},
-                files: ["js/ContentScript.js"]
-            });
-        } catch {
-            if (chrome.runtime.lastError) {
-                util.log(chrome.runtime.lastError.message);
-            }
-        }
+        return chrome.scripting.executeScript({
+            target: {tabId: tabId},
+            files: ["js/ContentScript.js"],
+        });
     }
 
     function populateControls() {
         loadUserPreferences();
         parserFactory.populateManualParserSelectionTag(getManuallySelectParserTag());
-        configureForTabMode();
+        importPageFromTabIdInUrl();
     }
 
     function loadUserPreferences() {
@@ -305,10 +319,26 @@ var main = (function() {
         BakaTsukiSeriesPageParser.registerBakaParsers(userPreferences.autoSelectBTSeriesPage.value);
     }
 
-    function isRunningInTabMode() {
-        // if query string supplied, we're running in Tab mode.
-        let search = window.location.search;
-        return !util.isNullOrEmpty(search);
+    async function isOpenInBrowserTab() {
+        // Clicking the toolbar icon first loads bare popup.html in the popup.
+        // That popup opens popup.html?id=<sourceTabId> in a browser tab and closes.
+        // The query string marks that second load, so it can initialize in place.
+        const hasQueryString = !util.isNullOrEmpty(window.location.search);
+        if (hasQueryString) {
+            return true;
+        }
+
+        // The address bar, a bookmark, or a homepage can also open bare popup.html.
+        // getCurrent() returns that browser tab and returns undefined in the popup.
+        // Without this check, a direct open would launch a second tab and try to
+        // inject into the first WebToEpub tab, causing Firefox's
+        // "Missing host permission for the tab" error.
+        const isFirefox = util.isFirefox();
+        const currentTab = isFirefox
+            ? await browser.tabs.getCurrent()
+            : await chrome.tabs.getCurrent();
+        const hasCurrentTab = currentTab != null;
+        return hasCurrentTab;
     }
 
     async function populateControlsWithDom(url, dom) {
@@ -466,14 +496,19 @@ var main = (function() {
         }
     }
 
-    function configureForTabMode() {
-        getActiveTabDOM(extractTabIdFromQueryParameter());
-    }
+    function importPageFromTabIdInUrl() {
+        // A bare popup.html link can open the library or settings without a
+        // source page. Skip the tab lookup and injection for that launch.
+        const sourceTabIdParam = new URLSearchParams(window.location.search).get("id");
+        const hasSourceTabId = !util.isNullOrEmpty(sourceTabIdParam);
+        if (!hasSourceTabId) {
+            return;
+        }
 
-    function extractTabIdFromQueryParameter() {
-        let windowId = window.location.search.split("=")[1];
-        if (!util.isNullOrEmpty(windowId)) {
-            return parseInt(windowId, 10);
+        const sourceTabId = Number(sourceTabIdParam);
+        const isSourceTabIdWellFormed = Number.isSafeInteger(sourceTabId) && sourceTabId >= 0;
+        if (isSourceTabIdWellFormed) {
+            getActiveTabDOM(sourceTabId);
         }
     }
 
@@ -741,7 +776,7 @@ var main = (function() {
             return;
         }
         userPreferences = UserPreferences.readFromLocalStorage();
-        if (isRunningInTabMode()) { 
+        if (await isOpenInBrowserTab()) {
             ErrorLog.SuppressErrorLog =  false;
             localizeHtmlPage();
             showExtensionVersion();
